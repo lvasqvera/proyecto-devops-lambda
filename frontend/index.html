@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Prueba DevOps - Seguros HDI</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; }
+        input, textarea, button { width: 100%; margin-bottom: 15px; padding: 10px; box-sizing: border-box; }
+        button { background-color: #005A9C; color: white; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>Contacto Seguros</h2>
+    <form id="contactForm">
+        <input type="text" id="nombre" placeholder="Nombre completo" required>
+        <input type="email" id="email" placeholder="Correo electrónico" required>
+        <textarea id="mensaje" placeholder="Su mensaje..." required></textarea>
+        <button type="submit">Enviar Solicitud</button>
+    </form>
+    <p id="respuesta"></p>
+
+    <script>
+        document.getElementById('contactForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Reemplaza esto con la URL que te dio Terraform en la consola
+            const API_URL = "https://dxums7ncgwckmw3z2qqighw2ei0xspoq.lambda-url.us-east-1.on.aws/"; 
+            
+            const datos = {
+                nombre: document.getElementById('nombre').value,
+                email: document.getElementById('email').value,
+                mensaje: document.getElementById('mensaje').value
+            };
+
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(datos)
+            });
+
+            const result = await response.json();
+            document.getElementById('respuesta').innerText = result.message;
+        });
+    </script>
+</body>
+</html>

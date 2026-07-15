@@ -1,0 +1,31 @@
+# ========================
+# Node.js / Backend
+# ========================
+node_modules/
+npm-debug.log
+
+# ========================
+# Terraform
+# ========================
+# Ignorar el directorio de proveedores descargados
+.terraform/
+
+# ¡CRÍTICO! Ignorar los archivos de estado (Seguridad)
+*.tfstate
+*.tfstate.backup
+
+# Ignorar archivos de variables con credenciales (si llegaras a usar)
+*.tfvars
+*.tfvars.json
+
+# ========================
+# Archivos Autogenerados
+# ========================
+# Ignorar el empaquetado de la Lambda que crea Terraform
+*.zip
+
+# ========================
+# Sistema Operativo
+# ========================
+.DS_Store
+Thumbs.db
