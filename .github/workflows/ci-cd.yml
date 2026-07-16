@@ -30,6 +30,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}    # El que configuraste en GitHub Secrets
         with:
           args: >
+            -Dsonar.qualitygate.wait=true 
             -Dsonar.organization=proitec-freelancer
             -Dsonar.projectKey=proitec-freelancer_proyecto-devops-lambda
             -Dsonar.sources=backend/,frontend/
