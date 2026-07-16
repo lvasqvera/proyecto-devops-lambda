@@ -4,9 +4,12 @@ on:
   push:
     branches:
       - main
+      - master # Agregamos master para que detecte tu rama actual
   pull_request:
     branches:
       - main
+      - master # Agregamos master para que detecte tu rama actual
+  workflow_dispatch: # ¡Magia DevOps! Esto te permite ejecutar el pipeline con un botón desde la web
 
 jobs:
   # ----------------------------------------------------
