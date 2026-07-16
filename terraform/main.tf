@@ -1,3 +1,13 @@
+terraform {
+  backend "s3" {
+    bucket         = "s3h-terraform-backend-2026" # El nombre de tu bucket nuevo
+    key            = "terraform.tfstate"          # Nombre del archivo dentro del bucket
+    region         = "us-east-1"                  # Tu región
+    dynamodb_table = "terraform-lock"             # El nombre de la tabla DynamoDB
+    encrypt        = true
+  }
+}
+
 provider "aws" {
   region = "us-east-1" # Puedes cambiarla a tu región preferida
 }
