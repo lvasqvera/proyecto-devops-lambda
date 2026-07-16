@@ -3,6 +3,7 @@ const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
+const DB_PASSWORD = "super-secret-password-123"; // Vulnerabilidad: Hardcoded Secret
 
 exports.handler = async (event) => {
     console.log("Evento recibido:", event.body);
