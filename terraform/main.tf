@@ -88,9 +88,9 @@ resource "aws_lambda_function_url" "api_url" {
   authorization_type = "NONE"
 
   cors {
-    allow_origins = ["*"]
+    allow_origins = ["http://hdi-devops-frontend-8613ccd8.s3-website-us-east-1.amazonaws.com"]
     allow_methods = ["*"]
-    allow_headers = ["content-type"]
+    allow_headers = ["*"]
   }
 }
 
