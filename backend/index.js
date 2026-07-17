@@ -3,15 +3,17 @@ const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
-const API_URL = import.meta.env.VITE_API_ENDPOINT;
-//const DB_PASSWORD = "super-secret-password-123"; // Vulnerabilidad: Hardcoded Secret
+
+// CORRECCIÓN: En Lambda usamos process.env, no import.meta.env
+// import.meta es para navegadores/Vite.
+const API_URL = process.env.API_ENDPOINT || "http://localhost";
 
 exports.handler = async (event) => {
     console.log("Evento recibido:", event.body);
     
     try {
-        // Lambda Function URLs a veces recibe el body en base64, pero simplificaremos asumiendo JSON puro
-        const body = JSON.parse(event.body);
+        // En Lambda, a veces el body viene como string, hay que parsearlo
+        const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
         
         const item = {
             id: Date.now().toString(),
@@ -30,12 +32,20 @@ exports.handler = async (event) => {
 
         return {
             statusCode: 200,
+            headers: {
+                "Access-Control-Allow-Origin": "*", // Necesario para evitar bloqueos CORS
+                "Content-Type": "application/json"
+            },
             body: JSON.stringify({ message: "¡Datos guardados con éxito en DynamoDB!" })
         };
     } catch (error) {
         console.error("Error guardando datos:", error);
         return {
             statusCode: 500,
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Content-Type": "application/json"
+            },
             body: JSON.stringify({ message: "Error interno del servidor" })
         };
     }
