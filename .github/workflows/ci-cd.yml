@@ -93,6 +93,7 @@ jobs:
           node-version: '20'
 
       - name: Build Frontend
+        working-directory: ./frontend
         run: |
           npm install
           npm run build
@@ -135,6 +136,7 @@ jobs:
           node-version: '20'
 
       - name: Build Frontend (PROD)
+        working-directory: ./frontend
         run: |
           npm install
           npm run build
