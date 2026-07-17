@@ -2,19 +2,19 @@ terraform {
   backend "s3" {
     bucket         = "s3h-terraform-backend-2026" # El nombre de tu bucket nuevo
     key            = "terraform.tfstate"          # Nombre del archivo dentro del bucket
-    region         = "us-east-1"                  # Tu región
+    region         = var.aws_region               # Tu región
     dynamodb_table = "terraform-lock"             # El nombre de la tabla DynamoDB
     encrypt        = true
   }
 }
 
 provider "aws" {
-  region = "us-east-1" # Puedes cambiarla a tu región preferida
+  region = var.aws_region # Puedes cambiarla a tu región preferida
 }
 
 # 1. Base de Datos DynamoDB
-resource "aws_dynamodb_table" "contactos" {
-  name           = "TablaContactosHDI"
+resource "aws_dynamodb_table-${var.environment}" "contactos" {
+  name           = "TablaContactosForm"
   billing_mode   = "PROVISIONED" # Modificado para garantizar Capa Gratuita
   read_capacity  = 1             # Consumo mínimo, entra en los 25 gratis
   write_capacity = 1             # Consumo mínimo, entra en los 25 gratis
@@ -27,7 +27,7 @@ resource "aws_dynamodb_table" "contactos" {
 
 # 2. Permisos (IAM Role) para la Lambda
 resource "aws_iam_role" "lambda_exec" {
-  name = "lambda_role_hdi"
+  name = "lambda_role_form_${var.environment}"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -69,7 +69,7 @@ data "archive_file" "lambda_zip" {
 # 4. Crear la función Lambda
 resource "aws_lambda_function" "api_backend" {
   filename         = data.archive_file.lambda_zip.output_path
-  function_name    = "ContactoAPI"
+  function_name    = "ContactoAPI_${var.environment}"
   role             = aws_iam_role.lambda_exec.arn
   handler          = "index.handler"
   runtime          = "nodejs20.x"
@@ -88,7 +88,7 @@ resource "aws_lambda_function_url" "api_url" {
   authorization_type = "NONE"
 
   cors {
-    allow_origins = ["http://hdi-devops-frontend-8613ccd8.s3-website-us-east-1.amazonaws.com"]
+    allow_origins = ["*"]
     allow_methods = ["*"]
     allow_headers = ["*"]
   }
@@ -100,7 +100,7 @@ output "api_endpoint" {
 }
 # 7. Crear un Bucket S3 para alojar el Frontend
 resource "aws_s3_bucket" "frontend_bucket" {
-  bucket = "hdi-devops-frontend-${random_id.bucket_suffix.hex}"
+  bucket = "form-devops-frontend--${var.environment}${random_id.bucket_suffix.hex}"
 }
 
 # Generar un sufijo aleatorio para que el nombre del bucket sea único
