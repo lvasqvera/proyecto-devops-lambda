@@ -34,13 +34,12 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.qualitygate.wait=true
             -Dsonar.organization=proitec-freelancer
             -Dsonar.projectKey=proitec-freelancer_proyecto-devops-lambda
             -Dsonar.sources=backend/,frontend/
 
   # ----------------------------------------------------
-  # JOB 2: AI Code Review
+  # JOB 2: AI Code Review             -Dsonar.qualitygate.wait=true
   # ----------------------------------------------------
   ai_code_review:
     name: AI Automated Review
