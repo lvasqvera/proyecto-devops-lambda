@@ -39,32 +39,13 @@ jobs:
             -Dsonar.sources=backend/,frontend/
 
   # ----------------------------------------------------
-  # JOB 2: AI Code Review             -Dsonar.qualitygate.wait=true
-  # ----------------------------------------------------
-  ai_code_review:
-    name: AI Automated Review
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: AI Code Reviewer
-        uses: anc95/ChatGPT-CodeReview@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-  # ----------------------------------------------------
-  # JOB 3: Despliegue en TEST (us-east-2)
+  # JOB 2: Despliegue en TEST (us-east-2)
   # ----------------------------------------------------
   deploy_test:
     name: Deploy to TEST
-    runs-on: ubuntu-latest # <--- ¡ESTO FALTABA!
+    runs-on: ubuntu-latest
     needs: sonarcloud_quality_gate
-    if: github.ref == 'refs/heads/develop' # Restringido solo a develop
+    if: github.ref == 'refs/heads/develop'
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
@@ -80,28 +61,14 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init & Apply (TEST)
-        id: tf_apply
         run: |
           terraform init
           terraform workspace select -or-create test
           terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
         working-directory: ./terraform
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build Frontend
-        working-directory: ./frontend
-        run: |
-          npm install
-          npm run build
-        env:
-          VITE_API_ENDPOINT: ${{ steps.tf_apply.outputs.api_url }}
-
   # ----------------------------------------------------
-  # JOB 4: Despliegue en PRODUCCIÓN (us-east-1)
+  # JOB 3: Despliegue en PRODUCCIÓN (us-east-1)
   # ----------------------------------------------------
   deploy_prod:
     name: Deploy to PROD
@@ -123,22 +90,8 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init & Apply (PROD)
-        id: tf_apply_prod
         run: |
           terraform init
           terraform workspace select -or-create prod
           terraform apply -auto-approve -var="environment=prod" -var="aws_region=us-east-1"
         working-directory: ./terraform
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build Frontend (PROD)
-        working-directory: ./frontend
-        run: |
-          npm install
-          npm run build
-        env:
-          VITE_API_ENDPOINT: ${{ steps.tf_apply_prod.outputs.api_url }}
