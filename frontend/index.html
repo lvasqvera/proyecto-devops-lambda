@@ -9,8 +9,9 @@
         button { background-color: #005A9C; color: white; border: none; cursor: pointer; }
     </style>
     <script>
+        // Esta es la variable que inyecta el pipeline
         window.API_URL = "URL_API_PLACEHOLDER";
-      </script>
+    </script>
 </head>
 <body>
     <h2>Contacto Seguros</h2>
@@ -26,25 +27,43 @@
         document.getElementById('contactForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            // Reemplaza esto con la URL que te dio Terraform en la consola
-            const API_URL = "https://gg7zgr3awcj3m2wppjvkikjzja0qbdak.lambda-url.us-east-2.on.aws/"; 
+            // Usamos la URL inyectada por el pipeline. Si no está inyectada (fallback), usamos la hardcodeada
+            const targetUrl = (window.API_URL && window.API_URL !== "URL_API_PLACEHOLDER") 
+                ? window.API_URL 
+                : "https://gg7zgr3awcj3m2wppjvkikjzja0qbdak.lambda-url.us-east-2.on.aws/";
             
-            const datos = {
-                nombre: document.getElementById('nombre').value,
-                email: document.getElementById('email').value,
-                mensaje: document.getElementById('mensaje').value
-            };
+            const respuestaElemento = document.getElementById('respuesta');
+            respuestaElemento.innerText = "Enviando..."; // Feedback visual
 
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(datos)
-            });
+            try {
+                const datos = {
+                    nombre: document.getElementById('nombre').value,
+                    email: document.getElementById('email').value,
+                    mensaje: document.getElementById('mensaje').value
+                };
 
-            const result = await response.json();
-            document.getElementById('respuesta').innerText = result.message;
+                const response = await fetch(targetUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(datos)
+                });
+
+                // Convertimos la respuesta a JSON
+                const result = await response.json();
+                
+                // Actualizamos el mensaje en pantalla
+                if (response.ok) {
+                    respuestaElemento.innerText = result.message;
+                    document.getElementById('contactForm').reset(); // Limpiamos el formulario
+                } else {
+                    respuestaElemento.innerText = "Error: " + (result.message || "No se pudo procesar la solicitud.");
+                }
+
+            } catch (error) {
+                console.error("Error en el fetch:", error);
+                respuestaElemento.innerText = "Error crítico de conexión con el servidor.";
+            }
         });
-        <!-- Build v5 -->
     </script>
 </body>
 </html>
