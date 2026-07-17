@@ -8,6 +8,9 @@
         input, textarea, button { width: 100%; margin-bottom: 15px; padding: 10px; box-sizing: border-box; }
         button { background-color: #005A9C; color: white; border: none; cursor: pointer; }
     </style>
+    <script>
+        window.API_URL = "URL_API_PLACEHOLDER";
+      </script>
 </head>
 <body>
     <h2>Contacto Seguros</h2>
@@ -41,7 +44,7 @@
             const result = await response.json();
             document.getElementById('respuesta').innerText = result.message;
         });
-        <!-- Build v4 -->
+        <!-- Build v5 -->
     </script>
 </body>
 </html>

@@ -67,6 +67,20 @@ jobs:
           terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
         working-directory: ./terraform
 
+      - name: Inyectar URL de la API en index.html
+        working-directory: ./terraform
+        run: |
+          # Reemplaza el placeholder con la URL real generada por Terraform
+          sed -i 's|URL_API_PLACEHOLDER|${{ steps.tf_apply.outputs.api_url }}|g' ../frontend/index.html
+          
+      - name: Sincronizar index.html a S3
+        run: |
+          # Si usas Terraform para subir el archivo, el simple hecho de haber
+          # modificado el archivo localmente hará que Terraform lo detecte y lo suba
+          # en el siguiente apply o puedes forzar un apply aquí si es necesario.
+          terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
+        working-directory: ./terraform
+
   # ----------------------------------------------------
   # JOB 3: Despliegue en PRODUCCIÓN (us-east-1)
   # ----------------------------------------------------
@@ -94,4 +108,18 @@ jobs:
           terraform init
           terraform workspace select -or-create prod
           terraform apply -auto-approve -var="environment=prod" -var="aws_region=us-east-1"
+        working-directory: ./terraform
+
+      - name: Inyectar URL de la API en index.html
+        working-directory: ./terraform
+        run: |
+          # Reemplaza el placeholder con la URL real generada por Terraform
+          sed -i 's|URL_API_PLACEHOLDER|${{ steps.tf_apply.outputs.api_url }}|g' ../frontend/index.html
+          
+      - name: Sincronizar index.html a S3
+        run: |
+          # Si usas Terraform para subir el archivo, el simple hecho de haber
+          # modificado el archivo localmente hará que Terraform lo detecte y lo suba
+          # en el siguiente apply o puedes forzar un apply aquí si es necesario.
+          terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
         working-directory: ./terraform
