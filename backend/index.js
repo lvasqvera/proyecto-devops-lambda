@@ -5,10 +5,11 @@ const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
 exports.handler = async (event) => {
-    // Definición estricta de headers para CORS
     const method = event.requestContext?.http?.method || event.httpMethod;
+    
+    // Eliminamos 'Access-Control-Allow-Origin' de aquí para evitar la duplicidad
+    // Si AWS ya está inyectando esta cabecera por defecto, esta es la causa del error.
     const headers = {
-        "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
         "Access-Control-Expose-Headers": "Content-Type",
