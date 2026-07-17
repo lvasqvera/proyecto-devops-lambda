@@ -60,8 +60,9 @@
                 }
 
             } catch (error) {
-                console.error("Error en el fetch:", error);
-                respuestaElemento.innerText = "Error crítico de conexión con el servidor.";
+                // Modificación: Esto nos dirá exactamente por qué falla
+                console.error("DETALLE DEL ERROR:", error); 
+                respuestaElemento.innerText = "Error: " + error.message;
             }
         });
         // build 7
