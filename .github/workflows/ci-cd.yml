@@ -81,7 +81,7 @@ jobs:
       - name: Terraform Init & Apply (TEST)
         run: |
           terraform init
-          terraform workspace select test || terraform workspace new test
+          terraform workspace select -or-create test
           terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
         working-directory: ./terraform
 
@@ -110,6 +110,6 @@ jobs:
       - name: Terraform Init & Apply (PROD)
         run: |
           terraform init
-          terraform workspace select prod || terraform workspace new prod
+          terraform workspace select -or-create prod
           terraform apply -auto-approve -var="environment=prod" -var="aws_region=us-east-1"
         working-directory: ./terraform
