@@ -6,7 +6,7 @@ on:
       - develop
       - master
     tags:
-      - 'v*' # Se activa cuando creas un tag (ej: v1.0.0) para release de producción
+      - 'v*'
   pull_request:
     branches:
       - develop
@@ -15,7 +15,7 @@ on:
 
 jobs:
   # ----------------------------------------------------
-  # JOB 1: Análisis de Calidad (Shift Left)
+  # JOB 1: Análisis de Calidad
   # ----------------------------------------------------
   sonarcloud_quality_gate:
     name: SonarCloud Scan
@@ -40,7 +40,7 @@ jobs:
             -Dsonar.sources=backend/,frontend/
 
   # ----------------------------------------------------
-  # JOB 2: IA Code Review (Solo en Pull Requests)             
+  # JOB 2: AI Code Review
   # ----------------------------------------------------
   ai_code_review:
     name: AI Automated Review
@@ -63,23 +63,32 @@ jobs:
   # ----------------------------------------------------
   deploy_test:
     name: Deploy to TEST
-    # ... (tu configuración actual)
+    runs-on: ubuntu-latest # <--- ¡ESTO FALTABA!
+    needs: sonarcloud_quality_gate
+    if: github.ref == 'refs/heads/develop' # Restringido solo a develop
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      # ... (tus pasos de AWS y Setup Terraform)
+      - name: Configure AWS Credentials (TEST)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init & Apply (TEST)
-        id: tf_apply  # <--- ESTO ES VITAL: Es el identificador que permite que otros pasos lean este output
+        id: tf_apply
         run: |
           terraform init
           terraform workspace select -or-create test
           terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
         working-directory: ./terraform
 
-      # --- AQUÍ VA EL CÓDIGO QUE PEDISTE ---
-      - name: Setup Node.js  # Asegúrate de tener Node instalado antes de hacer build
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -89,7 +98,7 @@ jobs:
           npm install
           npm run build
         env:
-          VITE_API_ENDPOINT: ${{ steps.tf_apply.outputs.api_url }} # Aquí captura el output
+          VITE_API_ENDPOINT: ${{ steps.tf_apply.outputs.api_url }}
 
   # ----------------------------------------------------
   # JOB 4: Despliegue en PRODUCCIÓN (us-east-1)
@@ -114,7 +123,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init & Apply (PROD)
-        id: tf_apply_prod # ID único para producción
+        id: tf_apply_prod
         run: |
           terraform init
           terraform workspace select -or-create prod
@@ -131,5 +140,4 @@ jobs:
           npm install
           npm run build
         env:
-          # Aquí inyectamos la URL de PROD obtenida dinámicamente de Terraform
           VITE_API_ENDPOINT: ${{ steps.tf_apply_prod.outputs.api_url }}
