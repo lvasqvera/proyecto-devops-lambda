@@ -9,7 +9,6 @@
         button { background-color: #005A9C; color: white; border: none; cursor: pointer; }
     </style>
     <script>
-        // Esta es la variable que inyecta el pipeline
         window.API_URL = "URL_API_PLACEHOLDER";
     </script>
 </head>
@@ -27,13 +26,12 @@
         document.getElementById('contactForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            // Usamos la URL inyectada por el pipeline. Si no está inyectada (fallback), usamos la hardcodeada
             const targetUrl = (window.API_URL && window.API_URL !== "URL_API_PLACEHOLDER") 
                 ? window.API_URL 
                 : "https://gg7zgr3awcj3m2wppjvkikjzja0qbdak.lambda-url.us-east-2.on.aws/";
             
             const respuestaElemento = document.getElementById('respuesta');
-            respuestaElemento.innerText = "Enviando..."; // Feedback visual
+            respuestaElemento.innerText = "Enviando..."; 
 
             try {
                 const datos = {
@@ -48,24 +46,28 @@
                     body: JSON.stringify(datos)
                 });
 
-                // Convertimos la respuesta a JSON
-                const result = await response.json();
+                const responseText = await response.text(); 
+                console.log("Respuesta cruda del servidor:", responseText);
                 
-                // Actualizamos el mensaje en pantalla
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (e) {
+                    throw new Error("Respuesta no es JSON válido: " + responseText);
+                }
+                
                 if (response.ok) {
                     respuestaElemento.innerText = result.message;
-                    document.getElementById('contactForm').reset(); // Limpiamos el formulario
+                    document.getElementById('contactForm').reset();
                 } else {
-                    respuestaElemento.innerText = "Error: " + (result.message || "No se pudo procesar la solicitud.");
+                    respuestaElemento.innerText = "Error: " + (result.message || "Falla en servidor");
                 }
 
             } catch (error) {
-                // Modificación: Esto nos dirá exactamente por qué falla
                 console.error("DETALLE DEL ERROR:", error); 
                 respuestaElemento.innerText = "Error: " + error.message;
             }
         });
-        // build 7
     </script>
 </body>
 </html>
