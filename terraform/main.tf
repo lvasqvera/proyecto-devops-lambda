@@ -2,7 +2,7 @@ terraform {
   backend "s3" {
     bucket         = "s3h-terraform-backend-2026" # El nombre de tu bucket nuevo
     key            = "terraform.tfstate"          # Nombre del archivo dentro del bucket
-    region         = var.aws_region               # Tu región
+    region         = "us-east-1"                  # Tu región
     dynamodb_table = "terraform-lock"             # El nombre de la tabla DynamoDB
     encrypt        = true
   }
@@ -13,8 +13,8 @@ provider "aws" {
 }
 
 # 1. Base de Datos DynamoDB
-resource "aws_dynamodb_table-${var.environment}" "contactos" {
-  name           = "TablaContactosForm"
+resource "aws_dynamodb_table" "contactos" {
+  name           = "TablaContactosForm-${var.environment}"
   billing_mode   = "PROVISIONED" # Modificado para garantizar Capa Gratuita
   read_capacity  = 1             # Consumo mínimo, entra en los 25 gratis
   write_capacity = 1             # Consumo mínimo, entra en los 25 gratis
