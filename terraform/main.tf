@@ -150,3 +150,6 @@ resource "aws_s3_object" "index_html" {
 output "website_url" {
   value = aws_s3_bucket_website_configuration.frontend_website.website_endpoint
 }
+output "api_url" {
+  value = aws_api_gateway_deployment.main.invoke_url
+}
