@@ -4,15 +4,20 @@ const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
-// CORRECCIÓN: En Lambda usamos process.env, no import.meta.env
-// import.meta es para navegadores/Vite.
-const API_URL = process.env.API_ENDPOINT || "http://localhost";
-
 exports.handler = async (event) => {
-    console.log("Evento recibido:", event.body);
-    
+    // 1. Manejo de Preflight Request (CORS)
+    const method = event.requestContext?.http?.method || event.httpMethod;
+    const headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+    };
+
+    if (method === 'OPTIONS') {
+        return { statusCode: 200, headers };
+    }
+
     try {
-        // En Lambda, a veces el body viene como string, hay que parsearlo
         const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
         
         const item = {
@@ -32,20 +37,14 @@ exports.handler = async (event) => {
 
         return {
             statusCode: 200,
-            headers: {
-                "Access-Control-Allow-Origin": "*", // Necesario para evitar bloqueos CORS
-                "Content-Type": "application/json"
-            },
+            headers,
             body: JSON.stringify({ message: "¡Datos guardados con éxito en DynamoDB!" })
         };
     } catch (error) {
-        console.error("Error guardando datos:", error);
+        console.error("Error:", error);
         return {
             statusCode: 500,
-            headers: {
-                "Access-Control-Allow-Origin": "*",
-                "Content-Type": "application/json"
-            },
+            headers,
             body: JSON.stringify({ message: "Error interno del servidor" })
         };
     }
