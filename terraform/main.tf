@@ -144,6 +144,10 @@ resource "aws_s3_object" "index_html" {
   key          = "index.html"
   source       = "../frontend/index.html"
   content_type = "text/html"
+
+  # Sin etag, Terraform no detecta cambios de contenido del archivo y un push
+  # que solo toca el frontend nunca se sube al bucket.
+  etag = filemd5("../frontend/index.html")
 }
 
 # Mostrar la URL de la página web al terminar

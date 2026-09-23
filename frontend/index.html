@@ -26,12 +26,17 @@
         document.getElementById('contactForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const targetUrl = (window.API_URL && window.API_URL !== "URL_API_PLACEHOLDER") 
-                ? window.API_URL 
-                : "https://gg7zgr3awcj3m2wppjvkikjzja0qbdak.lambda-url.us-east-2.on.aws/";
-            
+            const targetUrl = window.API_URL;
             const respuestaElemento = document.getElementById('respuesta');
-            respuestaElemento.innerText = "Enviando..."; 
+
+            // Sin URL inyectada no se adivina un endpoint: un fallback fijo haría
+            // que el frontend de un ambiente escriba en la base de otro.
+            if (!targetUrl || targetUrl === "URL_API_PLACEHOLDER") {
+                respuestaElemento.innerText = "Error de despliegue: la URL de la API no fue inyectada en este ambiente.";
+                return;
+            }
+
+            respuestaElemento.innerText = "Enviando...";
 
             try {
                 const datos = {

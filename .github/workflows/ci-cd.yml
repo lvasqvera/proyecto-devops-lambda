@@ -1,12 +1,18 @@
 name: GitFlow DevOps Pipeline - Multi-Env
 
+# Flujo:
+#   feature/**  -> despliega en TEST (us-east-2)
+#   develop     -> despliega en TEST (us-east-2)
+#   master      -> despliega en PROD (us-east-1) y crea el tag + Release
+#
+# El tag lo genera el job "release" al final de un despliegue exitoso a PROD,
+# por eso no se dispara con push de tags: sería un ciclo.
 on:
   push:
     branches:
+      - 'feature/**'
       - develop
       - master
-    tags:
-      - 'v*'
   pull_request:
     branches:
       - develop
@@ -20,6 +26,7 @@ jobs:
   sonarcloud_quality_gate:
     name: SonarCloud Scan
     runs-on: ubuntu-latest
+    # En master el scan es bloqueante; en feature/develop solo informa.
     continue-on-error: ${{ github.ref != 'refs/heads/master' }}
     steps:
       - name: Checkout Repo
@@ -45,7 +52,11 @@ jobs:
     name: Deploy to TEST
     runs-on: ubuntu-latest
     needs: sonarcloud_quality_gate
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')
+    # Varias ramas feature comparten el mismo ambiente y el mismo lock de estado.
+    concurrency:
+      group: deploy-test
+      cancel-in-progress: false
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
@@ -59,27 +70,63 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
-      - name: Terraform Init & Apply (TEST)
-        run: |
-          terraform init
-          terraform workspace select -or-create test
-          terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
+      - name: Terraform Init
         working-directory: ./terraform
+        run: terraform init
 
-      - name: Inyectar URL de la API en index.html
+      - name: Seleccionar workspace TEST
+        working-directory: ./terraform
+        run: terraform workspace select -or-create test
+
+      # Si el ambiente ya existe, la URL se conoce antes de aplicar y basta un
+      # solo apply. Solo el primer despliegue necesita aplicar dos veces.
+      - name: Inyectar URL de la API (ambiente ya existente)
+        id: pre_inject
         working-directory: ./terraform
         run: |
-          # Reemplaza el placeholder con la URL real generada por Terraform
-          sed -i 's|URL_API_PLACEHOLDER|${{ steps.tf_apply.outputs.api_url }}|g' ../frontend/index.html
-          
-      - name: Sincronizar index.html a S3
+          if API_URL=$(terraform output -raw api_url 2>/dev/null) && [ -n "$API_URL" ]; then
+            sed -i "s|URL_API_PLACEHOLDER|${API_URL}|g" ../frontend/index.html
+            echo "inyectada=si" >> "$GITHUB_OUTPUT"
+            echo "URL conocida, inyectada antes del apply: $API_URL"
+          else
+            echo "inyectada=no" >> "$GITHUB_OUTPUT"
+            echo "Ambiente nuevo: la URL se inyecta despues del primer apply"
+          fi
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
+
+      - name: Inyectar URL y re-aplicar (primer despliegue del ambiente)
+        if: steps.pre_inject.outputs.inyectada == 'no'
+        working-directory: ./terraform
         run: |
-          # Si usas Terraform para subir el archivo, el simple hecho de haber
-          # modificado el archivo localmente hará que Terraform lo detecte y lo suba
-          # en el siguiente apply o puedes forzar un apply aquí si es necesario.
+          API_URL=$(terraform output -raw api_url)
+          echo "URL de la API en TEST: $API_URL"
+          sed -i "s|URL_API_PLACEHOLDER|${API_URL}|g" ../frontend/index.html
           terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
+
+      - name: Verificar que el placeholder fue reemplazado
+        run: |
+          if grep -q "URL_API_PLACEHOLDER" frontend/index.html; then
+            echo "::error::El placeholder no fue reemplazado: el frontend quedaria sin endpoint"
+            exit 1
+          fi
+          echo "Placeholder reemplazado correctamente"
+
+      - name: Resumen del ambiente
         working-directory: ./terraform
+        run: |
+          {
+            echo "### Ambiente TEST desplegado (us-east-2)"
+            echo ""
+            echo "- **Frontend:** http://$(terraform output -raw website_url)"
+            echo "- **API:** $(terraform output -raw api_url)"
+            echo "- **Rama:** \`${GITHUB_REF_NAME}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ----------------------------------------------------
   # JOB 3: Despliegue en PRODUCCIÓN (us-east-1)
@@ -88,7 +135,13 @@ jobs:
     name: Deploy to PROD
     runs-on: ubuntu-latest
     needs: sonarcloud_quality_gate
-    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/master'
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    outputs:
+      website_url: ${{ steps.urls.outputs.website_url }}
+      api_url: ${{ steps.urls.outputs.api_url }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
@@ -102,24 +155,124 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
-      - name: Terraform Init & Apply (PROD)
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Seleccionar workspace PROD
+        working-directory: ./terraform
+        run: terraform workspace select -or-create prod
+
+      # Si el ambiente ya existe, la URL se conoce antes de aplicar y basta un
+      # solo apply. Solo el primer despliegue necesita aplicar dos veces.
+      - name: Inyectar URL de la API (ambiente ya existente)
+        id: pre_inject
+        working-directory: ./terraform
         run: |
-          terraform init
-          terraform workspace select -or-create prod
+          if API_URL=$(terraform output -raw api_url 2>/dev/null) && [ -n "$API_URL" ]; then
+            sed -i "s|URL_API_PLACEHOLDER|${API_URL}|g" ../frontend/index.html
+            echo "inyectada=si" >> "$GITHUB_OUTPUT"
+            echo "URL conocida, inyectada antes del apply: $API_URL"
+          else
+            echo "inyectada=no" >> "$GITHUB_OUTPUT"
+            echo "Ambiente nuevo: la URL se inyecta despues del primer apply"
+          fi
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: terraform apply -auto-approve -var="environment=prod" -var="aws_region=us-east-1"
+
+      - name: Inyectar URL y re-aplicar (primer despliegue del ambiente)
+        if: steps.pre_inject.outputs.inyectada == 'no'
+        working-directory: ./terraform
+        run: |
+          API_URL=$(terraform output -raw api_url)
+          echo "URL de la API en PROD: $API_URL"
+          sed -i "s|URL_API_PLACEHOLDER|${API_URL}|g" ../frontend/index.html
           terraform apply -auto-approve -var="environment=prod" -var="aws_region=us-east-1"
-        working-directory: ./terraform
 
-      - name: Inyectar URL de la API en index.html
+      - name: Verificar que el placeholder fue reemplazado
+        run: |
+          if grep -q "URL_API_PLACEHOLDER" frontend/index.html; then
+            echo "::error::El placeholder no fue reemplazado: el frontend quedaria sin endpoint"
+            exit 1
+          fi
+          echo "Placeholder reemplazado correctamente"
+
+      - name: Capturar URLs
+        id: urls
         working-directory: ./terraform
         run: |
-          # Reemplaza el placeholder con la URL real generada por Terraform
-          sed -i 's|URL_API_PLACEHOLDER|${{ steps.tf_apply.outputs.api_url }}|g' ../frontend/index.html
-          
-      - name: Sincronizar index.html a S3
-        run: |
-          # Si usas Terraform para subir el archivo, el simple hecho de haber
-          # modificado el archivo localmente hará que Terraform lo detecte y lo suba
-          # en el siguiente apply o puedes forzar un apply aquí si es necesario.
-          terraform apply -auto-approve -var="environment=test" -var="aws_region=us-east-2"
+          {
+            echo "website_url=$(terraform output -raw website_url)"
+            echo "api_url=$(terraform output -raw api_url)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resumen del ambiente
         working-directory: ./terraform
+        run: |
+          {
+            echo "### Ambiente PRODUCCIÓN desplegado (us-east-1)"
+            echo ""
+            echo "- **Frontend:** http://$(terraform output -raw website_url)"
+            echo "- **API:** $(terraform output -raw api_url)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ----------------------------------------------------
+  # JOB 4: Tag + Release (solo tras un PROD exitoso)
+  # ----------------------------------------------------
+  release:
+    name: Crear Tag y Release
+    runs-on: ubuntu-latest
+    needs: deploy_prod
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calcular siguiente versión
+        id: version
+        run: |
+          ULTIMO=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$ULTIMO" ]; then
+            NUEVA="v1.0.0"
+          else
+            SEMVER=${ULTIMO#v}
+            MAJOR=$(echo "$SEMVER" | cut -d. -f1)
+            MINOR=$(echo "$SEMVER" | cut -d. -f2)
+            PATCH=$(echo "$SEMVER" | cut -d. -f3)
+            NUEVA="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
+          echo "anterior=${ULTIMO:-ninguno}" >> "$GITHUB_OUTPUT"
+          echo "nueva=${NUEVA}" >> "$GITHUB_OUTPUT"
+          echo "Versión anterior: ${ULTIMO:-ninguno} -> nueva: ${NUEVA}"
+
+      - name: Crear Tag y Release en GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.nueva }}" \
+            --target "${{ github.sha }}" \
+            --title "Release ${{ steps.version.outputs.nueva }}" \
+            --notes "Despliegue automático a PRODUCCIÓN (us-east-1).
+
+          - Frontend: http://${{ needs.deploy_prod.outputs.website_url }}
+          - API: ${{ needs.deploy_prod.outputs.api_url }}
+          - Commit: ${{ github.sha }}
+          - Versión anterior: ${{ steps.version.outputs.anterior }}"
+
+      - name: Resumen del release
+        run: |
+          {
+            echo "### Release ${{ steps.version.outputs.nueva }} publicado"
+            echo ""
+            echo "- Versión anterior: ${{ steps.version.outputs.anterior }}"
+            echo "- Commit: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
