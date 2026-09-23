@@ -29,9 +29,12 @@
             const targetUrl = window.API_URL;
             const respuestaElemento = document.getElementById('respuesta');
 
-            // Sin URL inyectada no se adivina un endpoint: un fallback fijo haría
-            // que el frontend de un ambiente escriba en la base de otro.
-            if (!targetUrl || targetUrl === "URL_API_PLACEHOLDER") {
+            // Se valida la forma de la URL, no el literal del placeholder: el sed
+            // del pipeline reemplaza toda ocurrencia y dejaría esta comparación
+            // apuntando contra sí misma, siempre verdadera.
+            // Sin URL inyectada tampoco se adivina un endpoint: un fallback fijo
+            // haría que el frontend de un ambiente escriba en la base de otro.
+            if (!targetUrl || !targetUrl.startsWith("https://")) {
                 respuestaElemento.innerText = "Error de despliegue: la URL de la API no fue inyectada en este ambiente.";
                 return;
             }

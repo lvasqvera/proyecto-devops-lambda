@@ -81,6 +81,17 @@ jobs:
         working-directory: ./terraform
         run: terraform workspace select -or-create test
 
+      # El sed reemplaza TODA ocurrencia: una segunda dentro de una comparación
+      # la dejaría apuntando contra sí misma y rompería el frontend en silencio.
+      - name: Validar que el placeholder sea único
+        run: |
+          OCURRENCIAS=$(grep -o "URL_API_PLACEHOLDER" frontend/index.html | wc -l)
+          if [ "$OCURRENCIAS" -ne 1 ]; then
+            echo "::error::Se esperaba 1 ocurrencia de URL_API_PLACEHOLDER y hay ${OCURRENCIAS}"
+            exit 1
+          fi
+          echo "Placeholder único: la inyección es segura"
+
       # Si el ambiente ya existe, la URL se conoce antes de aplicar y basta un
       # solo apply. Solo el primer despliegue necesita aplicar dos veces.
       - name: Inyectar URL de la API (ambiente ya existente)
@@ -165,6 +176,17 @@ jobs:
       - name: Seleccionar workspace PROD
         working-directory: ./terraform
         run: terraform workspace select -or-create prod
+
+      # El sed reemplaza TODA ocurrencia: una segunda dentro de una comparación
+      # la dejaría apuntando contra sí misma y rompería el frontend en silencio.
+      - name: Validar que el placeholder sea único
+        run: |
+          OCURRENCIAS=$(grep -o "URL_API_PLACEHOLDER" frontend/index.html | wc -l)
+          if [ "$OCURRENCIAS" -ne 1 ]; then
+            echo "::error::Se esperaba 1 ocurrencia de URL_API_PLACEHOLDER y hay ${OCURRENCIAS}"
+            exit 1
+          fi
+          echo "Placeholder único: la inyección es segura"
 
       # Si el ambiente ya existe, la URL se conoce antes de aplicar y basta un
       # solo apply. Solo el primer despliegue necesita aplicar dos veces.
