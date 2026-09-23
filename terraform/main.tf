@@ -1,4 +1,11 @@
 terraform {
+  required_providers {
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13"
+    }
+  }
+
   backend "s3" {
     bucket         = "s3h-terraform-backend-2026" # El nombre de tu bucket nuevo
     key            = "terraform.tfstate"          # Nombre del archivo dentro del bucket
@@ -123,6 +130,15 @@ resource "aws_s3_bucket_public_access_block" "public_access" {
   restrict_public_buckets = false
 }
 
+# El Block Public Access de S3 es eventualmente consistente: depends_on ordena
+# las llamadas pero no espera a que la desactivación propague, así que el
+# PutBucketPolicy salía ~2 ms después y AWS lo rechazaba con AccessDenied
+# ("public policies are prevented by the BlockPublicPolicy setting").
+resource "time_sleep" "espera_public_access_block" {
+  depends_on      = [aws_s3_bucket_public_access_block.public_access]
+  create_duration = "20s"
+}
+
 # Política para que cualquiera en internet pueda leer el HTML
 resource "aws_s3_bucket_policy" "public_read" {
   bucket = aws_s3_bucket.frontend_bucket.id
@@ -135,7 +151,7 @@ resource "aws_s3_bucket_policy" "public_read" {
       Resource  = "${aws_s3_bucket.frontend_bucket.arn}/*"
     }]
   })
-  depends_on = [aws_s3_bucket_public_access_block.public_access]
+  depends_on = [time_sleep.espera_public_access_block]
 }
 
 # Subir el archivo index.html al Bucket automáticamente
