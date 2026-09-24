@@ -67,7 +67,7 @@ así un error de región nunca alcanza al otro.
 | Lambda | `ContactoAPI_test` | `ContactoAPI_prod` |
 | Tabla | `TablaContactosForm-test` | `TablaContactosForm-prod` |
 | Rol del pipeline | `gha-deploy-test` | `gha-deploy-prod` |
-| Se despliega desde | `feature/**`, `hotfix/**`, `develop` | `master` |
+| Se despliega desde | `feature/**`, `hotfix/**`, `release/**`, `develop` | `master` |
 
 **Frontend TEST**
 `http://form-devops-frontend--testf09ad3e4.s3-website.us-east-2.amazonaws.com`
@@ -242,7 +242,7 @@ Hay **dos roles**, no uno, y cada uno confía en un conjunto distinto de ramas:
 
 | Rol | Ramas que pueden asumirlo | Alcance de los permisos |
 |---|---|---|
-| `gha-deploy-test` | `develop`, `feature/*`, `hotfix/*` | solo recursos `*_test` |
+| `gha-deploy-test` | `develop`, `feature/*`, `hotfix/*`, `release/*` | solo recursos `*_test` |
 | `gha-deploy-prod` | **`master` únicamente** | solo recursos `*_prod` |
 
 Esto importa: si alguien crea una rama con un workflow modificado que intente

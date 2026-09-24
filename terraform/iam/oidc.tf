@@ -28,7 +28,9 @@ locals {
   # `lvasqvera` fue renombrada, pero se aceptan ambos formatos porque la
   # documentación oficial solo muestra el plano y descubrir cuál usa exige
   # decodificar un token real: dejar los dos evita un ciclo de CI a ciegas.
-  ramas_test = ["develop", "feature/*", "hotfix/*"]
+  # release/* despliega en TEST, nunca en PROD: es el candidato a producción,
+  # y quien impide que se pase de ahí es esta política, no el workflow.
+  ramas_test = ["develop", "feature/*", "hotfix/*", "release/*"]
 
   subs_test = flatten([
     for rama in local.ramas_test : [
