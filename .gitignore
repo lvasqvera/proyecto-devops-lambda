@@ -18,6 +18,9 @@ npm-debug.log
 *.tfvars
 *.tfvars.json
 
+# Ignorar planes guardados: traen valores de recursos reales adentro
+*.tfplan
+
 # ========================
 # Archivos Autogenerados
 # ========================
