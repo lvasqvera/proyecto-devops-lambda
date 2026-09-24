@@ -172,6 +172,18 @@ workflows a partir de acciones hechas con `GITHUB_TOKEN`, para evitar bucles
 infinitos. No es una falla — la validación ya corrió en el push a la rama
 `release/**`, que es lo que habilitó el PR.
 
+**Requisito de la organización.** Para que el job pueda abrir el PR hace falta
+*Settings de la organización → Actions → General → «Allow GitHub Actions to
+create and approve pull requests»*. Es una política de organización: mientras
+esté apagada, el interruptor del repositorio no se puede activar (la API
+responde `409 Conflict`). Sin ese permiso el job **no falla**: avisa con un
+`::warning::` y deja el enlace del PR en el resumen de la corrida, porque el
+despliegue a TEST sí pasó y eso es lo que de verdad valida la release.
+
+Ese mismo interruptor habilita crear **y aprobar** PRs. Hoy no agrega riesgo
+porque ninguna rama exige aprobaciones; si alguna vez se configura *branch
+protection* con revisores obligatorios, conviene revisarlo.
+
 La GUI de GitFlow (repo `gui-gitflow`) arma el enlace de un PR cualquiera con
 las ramas de origen y destino ya elegidas, y publica la rama si todavía no
 está en el remoto.

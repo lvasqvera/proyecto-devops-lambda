@@ -335,6 +335,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#release/}"
+          MANUAL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/master...${GITHUB_REF_NAME}?expand=1"
 
           # Un PR ya abierto se actualiza solo con cada push a su rama: crear
           # uno nuevo daría error y dejaría el job en rojo sin motivo real.
@@ -342,10 +343,9 @@ jobs:
                         --state open --json number --jq '.[0].number // empty')
 
           if [ -n "$EXISTENTE" ]; then
-            echo "PR #${EXISTENTE} ya está abierto; el push lo actualizó."
             URL=$(gh pr view "$EXISTENTE" --json url --jq .url)
-          else
-            URL=$(gh pr create --base master --head "$GITHUB_REF_NAME" \
+            echo "PR #${EXISTENTE} ya está abierto; el push lo actualizó."
+          elif SALIDA=$(gh pr create --base master --head "$GITHUB_REF_NAME" \
               --title "Release ${VERSION}" \
               --body "Release \`${VERSION}\` validada en TEST (us-east-2).
 
@@ -356,8 +356,31 @@ jobs:
           abierto por \`GITHUB_TOKEN\` no dispara workflows de \`pull_request\`.
 
           Después del despliegue, el job \`Sincronizar develop\` mergea master de
-          vuelta a develop automáticamente.")
+          vuelta a develop automáticamente." 2>&1); then
+            URL="$SALIDA"
             echo "PR creado: ${URL}"
+          else
+            # La política de la organización puede prohibirle a Actions abrir
+            # PRs. Eso no invalida el despliegue a TEST que acaba de pasar, así
+            # que se avisa con el enlace manual en vez de teñir la corrida de
+            # rojo. Cualquier otro error sí es una falla real.
+            if printf '%s' "$SALIDA" | grep -q "not permitted to create or approve pull requests"; then
+              echo "::warning::La organización no permite que Actions abra PRs. Abrilo a mano: ${MANUAL}"
+              {
+                echo "### PR hacia master: abrilo a mano"
+                echo ""
+                echo "La release \`${VERSION}\` **está validada** (TEST desplegado)."
+                echo "La organización no permite que Actions cree el PR, así que:"
+                echo ""
+                echo "[Abrir el PR hacia master](${MANUAL})"
+                echo ""
+                echo "Para automatizarlo: Settings de la organización → Actions →"
+                echo "General → *Allow GitHub Actions to create and approve pull requests*."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::error::${SALIDA}"
+            exit 1
           fi
 
           {
