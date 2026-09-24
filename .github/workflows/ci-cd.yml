@@ -42,8 +42,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.organization=proitec-freelancer
-            -Dsonar.projectKey=proitec-freelancer_proyecto-devops-lambda
+            -Dsonar.organization=lvasqvera
+            -Dsonar.projectKey=lvasqvera_proyecto-devops-lambda
             -Dsonar.sources=backend/,frontend/
 
   # ----------------------------------------------------
