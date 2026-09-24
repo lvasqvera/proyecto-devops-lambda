@@ -122,6 +122,28 @@ git branch -d feature/mi-cambio
 git push origin --delete feature/mi-cambio
 ```
 
+### Revisión por Pull Request
+
+El ciclo de arriba mergea en local. Cuando el cambio necesita revisión, el
+merge lo hace GitHub al aprobar un Pull Request:
+
+```bash
+git push -u origin feature/mi-cambio      # → despliega en TEST
+gh pr create --base develop --head feature/mi-cambio
+```
+
+Abrir el PR **no despliega nada**: los jobs de despliegue comparan
+`github.ref` contra `refs/heads/...`, y en un evento `pull_request` el ref es
+`refs/pull/N/merge`, así que solo corre el análisis de SonarCloud. El
+despliegue ocurre al mergear, con el `push` a la rama destino.
+
+Al mergear conviene **«Rebase and merge»**: un commit de merge rompe la regla
+de fast-forward de más arriba.
+
+La GUI de GitFlow (repo `gui-gitflow`) arma este enlace con las ramas de
+origen y destino ya elegidas, y publica la rama si todavía no está en el
+remoto.
+
 ---
 
 ## El pipeline
