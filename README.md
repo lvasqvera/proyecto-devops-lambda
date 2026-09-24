@@ -167,10 +167,17 @@ El PR hacia `master` **no hay que crearlo a mano**: lo abre el job
 TEST pasó. Un PR abierto se actualiza solo con cada push a su rama, así que el
 job no crea uno nuevo si ya existe.
 
-Ese PR automático **no dispara sus propios checks**: GitHub no encadena
-workflows a partir de acciones hechas con `GITHUB_TOKEN`, para evitar bucles
-infinitos. No es una falla — la validación ya corrió en el push a la rama
-`release/**`, que es lo que habilitó el PR.
+Ese PR automático **no ejecuta sus propios checks**, porque GitHub no encadena
+workflows a partir de acciones hechas con `GITHUB_TOKEN`: es su defensa contra
+bucles infinitos. Lo que se ve en la práctica no es «ninguna corrida», sino una
+corrida de `pull_request` detenida en `action_required` — esperando una
+aprobación manual que nadie da — que termina marcada en rojo **con cero jobs
+ejecutados**.
+
+Ese rojo no significa que la release esté rota: no corrió nada, así que no
+falló nada. La validación real ya ocurrió en el push a la rama `release/**`,
+que es justamente lo que habilitó que el PR se abriera. Mirá esa corrida, no
+la del PR.
 
 **Requisito de la organización.** Para que el job pueda abrir el PR hace falta
 *Settings de la organización → Actions → General → «Allow GitHub Actions to
