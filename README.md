@@ -87,9 +87,14 @@ de este POC.
 feature/**  ──push──►  TEST          desarrollo y pruebas
 hotfix/**   ──push──►  TEST          correcciones urgentes, validadas antes de prod
      │
-     └─merge─►  develop  ──►  TEST   integración
+     └─merge─►  develop  ──push──►  TEST          integración
                    │
-                   └─merge─►  master  ──►  PRODUCCIÓN  +  tag vX.Y.Z  +  Release
+                   └─►  release/X.Y.Z  ──push──►  TEST  +  PR automático
+                              │
+                              └─[mergeás el PR]─►  master  ──►  PRODUCCIÓN
+                                                      │         +  tag vX.Y.Z
+                                                      │         +  Release
+                                                      └─back-merge automático─►  develop
 ```
 
 Reglas:
@@ -97,30 +102,50 @@ Reglas:
 - **Nada se trabaja directo en `master` ni en `develop`.** Toda rama nace de
   `develop`, salvo los `hotfix/**`, que nacen de `master` y se mergean a
   ambas.
-- Los merges son **fast-forward**. Evita commits de merge que viven solo en
-  una rama y después producen un «Diverging branches» sin diferencias reales
-  detrás.
+- **A producción se entra solo por Pull Request.** El pipeline lo abre solo
+  cuando el despliegue a TEST de la rama `release/**` termina bien: el PR es
+  la señal de que la release está validada, no de que alguien la empujó.
+- Dentro de `develop` los merges son **fast-forward**. El merge del PR a
+  `master` sí genera un commit de merge — es inevitable, GitHub no tiene un
+  botón de fast-forward — y por eso existe el back-merge del punto siguiente.
+- **`develop` nunca queda atrás.** Tras cada despliegue a producción, el job
+  `sincronizar_develop` mergea `master` de vuelta a `develop` y lo pushea. Sin
+  eso, el commit de merge del PR vive solo en `master` y la siguiente rama
+  nace sin él.
 - **El tag lo genera el pipeline**, no una persona: al terminar un despliegue
   exitoso a producción, lee el último tag `v*`, incrementa el *patch* y
-  publica el Release en GitHub. Nunca se crean tags a mano.
+  publica el Release en GitHub. Nunca se crean tags a mano — en particular,
+  **no uses `git flow release finish`**, que crea el tag por su cuenta y
+  dejaría dos tags para la misma versión.
 
 ### Ciclo completo
 
 ```bash
 git checkout develop && git pull
-git checkout -b feature/mi-cambio
+git flow feature start mi-cambio
 
 # ... trabajar, commitear ...
 git push -u origin feature/mi-cambio      # → despliega en TEST
 
-# probar en el frontend de TEST, y cuando esté listo:
+# probar en el frontend de TEST, y cuando esté listo, integrar:
 git checkout develop && git merge --ff-only feature/mi-cambio && git push
-git checkout master  && git merge --ff-only develop          && git push
-#                                          → despliega en PRODUCCIÓN + tag nuevo
-
 git branch -d feature/mi-cambio
 git push origin --delete feature/mi-cambio
+
+# cortar la release: se valida en TEST y el pipeline abre el PR hacia master
+git flow release start 1.0.8
+git push -u origin release/1.0.8
+
+# → revisar el PR que apareció solo, y mergearlo desde GitHub
+#   eso despliega PRODUCCIÓN, crea el tag y sincroniza develop hacia atrás
+
+git checkout develop && git pull          # trae el back-merge del pipeline
+git branch -d release/1.0.8
+git push origin --delete release/1.0.8
 ```
+
+La rama `release/**` no lleva un *bump* de versión: el número lo calcula el
+pipeline desde el último tag. El nombre de la rama es solo para leerlo.
 
 ### Revisión por Pull Request
 
@@ -137,12 +162,19 @@ Abrir el PR **no despliega nada**: los jobs de despliegue comparan
 `refs/pull/N/merge`, así que solo corre el análisis de SonarCloud. El
 despliegue ocurre al mergear, con el `push` a la rama destino.
 
-Al mergear conviene **«Rebase and merge»**: un commit de merge rompe la regla
-de fast-forward de más arriba.
+El PR hacia `master` **no hay que crearlo a mano**: lo abre el job
+`abrir_pr_master` al pushear una rama `release/**`, y solo si el despliegue a
+TEST pasó. Un PR abierto se actualiza solo con cada push a su rama, así que el
+job no crea uno nuevo si ya existe.
 
-La GUI de GitFlow (repo `gui-gitflow`) arma este enlace con las ramas de
-origen y destino ya elegidas, y publica la rama si todavía no está en el
-remoto.
+Ese PR automático **no dispara sus propios checks**: GitHub no encadena
+workflows a partir de acciones hechas con `GITHUB_TOKEN`, para evitar bucles
+infinitos. No es una falla — la validación ya corrió en el push a la rama
+`release/**`, que es lo que habilitó el PR.
+
+La GUI de GitFlow (repo `gui-gitflow`) arma el enlace de un PR cualquiera con
+las ramas de origen y destino ya elegidas, y publica la rama si todavía no
+está en el remoto.
 
 ---
 
@@ -153,9 +185,11 @@ Archivo: [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml)
 | Job | Cuándo corre | Qué hace |
 |---|---|---|
 | `sonarcloud_quality_gate` | siempre | Análisis estático. **Bloqueante solo en `master`** |
-| `deploy_test` | `feature/**`, `hotfix/**`, `develop` | `terraform apply` en `us-east-2` |
+| `deploy_test` | `feature/**`, `hotfix/**`, `release/**`, `develop` | `terraform apply` en `us-east-2` |
 | `deploy_prod` | `master` | `terraform apply` en `us-east-1` |
 | `release` | tras un `deploy_prod` exitoso | Calcula la versión, crea el tag y el Release |
+| `abrir_pr_master` | tras un `deploy_test` exitoso de `release/**` | Abre el PR hacia `master` si no existe ya |
+| `sincronizar_develop` | tras un `release` exitoso | Mergea `master` de vuelta a `develop` |
 
 ### Inyección de la URL de la API
 
