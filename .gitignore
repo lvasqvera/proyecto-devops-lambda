@@ -29,3 +29,5 @@ npm-debug.log
 # ========================
 .DS_Store
 Thumbs.db
+# Estado y artefactos locales de Terraform
+terraform/.infracost/
