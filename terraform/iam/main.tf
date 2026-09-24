@@ -29,13 +29,18 @@ locals {
   tabla_test = "arn:aws:dynamodb:us-east-2:${local.cuenta}:table/TablaContactosForm-test"
   tabla_prod = "arn:aws:dynamodb:us-east-1:${local.cuenta}:table/TablaContactosForm-prod"
 
+  # Describe* y List* van con comodín a propósito: en DynamoDB ninguna de esas
+  # acciones muta nada, y los paneles de NoSQL Workbench y de la consola llaman
+  # a media docena de ellas (TTL, backups, tags, réplicas, insights). Listarlas
+  # una por una sería ir agregándolas a medida que aparecen los errores.
   lectura = [
     "dynamodb:GetItem",
     "dynamodb:BatchGetItem",
     "dynamodb:Query",
     "dynamodb:Scan",
-    "dynamodb:DescribeTable",
     "dynamodb:PartiQLSelect",
+    "dynamodb:Describe*",
+    "dynamodb:List*",
   ]
 
   escritura = [
@@ -58,9 +63,13 @@ data "aws_iam_policy_document" "acceso_datos" {
   # tabla. NoSQL Workbench y la consola la necesitan para poblar el árbol.
   # Devuelve nombres, nunca contenido.
   statement {
-    sid       = "ListarTablasParaLosClientes"
-    effect    = "Allow"
-    actions   = ["dynamodb:ListTables", "dynamodb:DescribeLimits"]
+    sid    = "ListarTablasParaLosClientes"
+    effect = "Allow"
+    actions = [
+      "dynamodb:ListTables",
+      "dynamodb:DescribeLimits",
+      "dynamodb:DescribeEndpoints",
+    ]
     resources = ["*"]
   }
 
