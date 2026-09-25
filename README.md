@@ -57,17 +57,29 @@ Cada ambiente termina apuntando a su propio backend sin intervención manual.
 
 ## Ambientes
 
-Dos ambientes completos y aislados, en **regiones distintas a propósito** —
-así un error de región nunca alcanza al otro.
+Tres ambientes completos y aislados, en **regiones distintas a propósito** —
+así un error de región nunca alcanza a los otros, y el nivel gratuito de
+DynamoDB (25 RCU/WCU **por región**) no se reparte entre ellos.
 
-| | TEST | PRODUCCIÓN |
-|---|---|---|
-| Región | `us-east-2` | `us-east-1` |
-| Workspace de Terraform | `test` | `prod` |
-| Lambda | `ContactoAPI_test` | `ContactoAPI_prod` |
-| Tabla | `TablaContactosForm-test` | `TablaContactosForm-prod` |
-| Rol del pipeline | `gha-deploy-test` | `gha-deploy-prod` |
-| Se despliega desde | `feature/**`, `hotfix/**`, `release/**`, `develop` | `master` |
+| | ALPHA | TEST | PRODUCCIÓN |
+|---|---|---|---|
+| Región | `us-west-2` | `us-east-2` | `us-east-1` |
+| Workspace de Terraform | `alpha` | `test` | `prod` |
+| Lambda | `ContactoAPI_alpha` | `ContactoAPI_test` | `ContactoAPI_prod` |
+| Tabla | `TablaContactosForm-alpha` | `TablaContactosForm-test` | `TablaContactosForm-prod` |
+| Rol del pipeline | `gha-deploy-alpha` | `gha-deploy-test` | `gha-deploy-prod` |
+| Se despliega desde | `feature/**`, `hotfix/**` | `develop`, `release/**` | `master` |
+| Para qué sirve | trabajo en curso | lo integrado, lo valida QA | lo que usa la gente |
+
+**Por qué ALPHA y TEST están separados.** Varias ramas de trabajo comparten
+ALPHA y se pisan entre sí: eso está bien, es trabajo en curso. Lo que no puede
+pasar es que pisen el ambiente donde QA valida lo que ya está integrado. Con un
+solo ambiente para las dos cosas, la rama de un compañero sobrescribe aquello
+que otro está probando.
+
+Y no es solo convención: `gha-deploy-test` **no confía** en las ramas
+`feature/*`, así que una feature no puede tocar TEST aunque alguien lo intente
+desde el workflow. Quien lo impide es AWS al validar el token.
 
 **Frontend TEST**
 `http://form-devops-frontend--testf09ad3e4.s3-website.us-east-2.amazonaws.com`
@@ -84,10 +96,10 @@ de este POC.
 ## Flujo de trabajo (GitFlow)
 
 ```
-feature/**  ──push──►  TEST          desarrollo y pruebas
-hotfix/**   ──push──►  TEST          correcciones urgentes, validadas antes de prod
+feature/**  ──push──►  ALPHA        trabajo en curso, cada quien el suyo
+hotfix/**   ──push──►  ALPHA        correcciones urgentes, validadas antes de prod
      │
-     └─merge─►  develop  ──push──►  TEST          integración
+     └──PR + aprobación──►  develop  ──push──►  TEST   integración, lo valida QA
                    │
                    └─►  release/X.Y.Z  ──push──►  TEST  +  PR automático
                               │
@@ -101,7 +113,16 @@ Reglas:
 
 - **Nada se trabaja directo en `master` ni en `develop`.** Toda rama nace de
   `develop`, salvo los `hotfix/**`, que nacen de `master` y se mergean a
-  ambas.
+  ambas. En `develop` esto no es una convención: la rama está **protegida** y
+  GitHub rechaza cualquier push directo.
+- **A `develop` se entra por Pull Request aprobado.** El archivo
+  [`.github/CODEOWNERS`](.github/CODEOWNERS) define quién puede aprobarlo. Los
+  PR de feature se mergean con **«Squash and merge»**: cada funcionalidad entra
+  como un commit, y `develop` se lee como una lista de features.
+- **Tres ambientes, y la separación importa.** `alpha` es trabajo en curso y
+  las ramas se pisan entre sí a propósito; `test` solo recibe lo ya integrado,
+  así que es estable para que QA valide. Con un único ambiente, la rama de un
+  compañero sobrescribe aquello que otro está probando.
 - **A producción se entra solo por Pull Request.** El pipeline lo abre solo
   cuando el despliegue a TEST de la rama `release/**` termina bien: el PR es
   la señal de que la release está validada, no de que alguien la empujó.
@@ -210,7 +231,8 @@ Archivo: [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml)
 | Job | Cuándo corre | Qué hace |
 |---|---|---|
 | `sonarcloud_quality_gate` | siempre | Análisis estático. **Bloqueante solo en `master`** |
-| `deploy_test` | `feature/**`, `hotfix/**`, `release/**`, `develop` | `terraform apply` en `us-east-2` |
+| `deploy_alpha` | `feature/**`, `hotfix/**` | `terraform apply` en `us-west-2` |
+| `deploy_test` | `develop`, `release/**` | `terraform apply` en `us-east-2` |
 | `deploy_prod` | `master` | `terraform apply` en `us-east-1` |
 | `release` | tras un `deploy_prod` exitoso | Calcula la versión, crea el tag y el Release |
 | `abrir_pr_master` | tras un `deploy_test` exitoso de `release/**` | Abre el PR hacia `master` si no existe ya |
@@ -267,7 +289,8 @@ Hay **dos roles**, no uno, y cada uno confía en un conjunto distinto de ramas:
 
 | Rol | Ramas que pueden asumirlo | Alcance de los permisos |
 |---|---|---|
-| `gha-deploy-test` | `develop`, `feature/*`, `hotfix/*`, `release/*` | solo recursos `*_test` |
+| `gha-deploy-alpha` | `feature/*`, `hotfix/*` | solo recursos `*_alpha` |
+| `gha-deploy-test` | `develop`, `release/*` | solo recursos `*_test` |
 | `gha-deploy-prod` | **`master` únicamente** | solo recursos `*_prod` |
 
 Esto importa: si alguien crea una rama con un workflow modificado que intente

@@ -1,0 +1,7 @@
+# Quien tiene que aprobar los Pull Requests de este repositorio.
+#
+# Combinado con la regla de proteccion de `develop` ("Require review from Code
+# Owners"), esto es lo que hace que una feature no pueda entrar a develop sin
+# que una persona concreta la revise. Sin CODEOWNERS, cualquier colaborador con
+# permiso de escritura podria aprobar la suya propia.
+*   @proitec-freelancer
