@@ -191,9 +191,15 @@ Ese mismo interruptor habilita crear **y aprobar** PRs. Hoy no agrega riesgo
 porque ninguna rama exige aprobaciones; si alguna vez se configura *branch
 protection* con revisores obligatorios, conviene revisarlo.
 
-La GUI de GitFlow (repo `gui-gitflow`) arma el enlace de un PR cualquiera con
-las ramas de origen y destino ya elegidas, y publica la rama si todavía no
-está en el remoto.
+La GUI de GitFlow (repo `gui-gitflow`) cubre este flujo completo sin salir de
+la ventana: crea y publica ramas de `feature`, `release` y `hotfix`, arma el
+enlace del PR con origen y destino ya elegidos, publica la rama si todavía no
+está en el remoto, y muestra las últimas corridas del pipeline. Lee los nombres
+de rama de la configuración de git-flow del repositorio, así que no está atada a
+`master`/`develop`.
+
+Lo único que no hace es **mergear el PR**: ese es el punto donde decide una
+persona.
 
 ---
 
