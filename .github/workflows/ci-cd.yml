@@ -506,6 +506,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout develop
         uses: actions/checkout@v4
@@ -514,6 +515,8 @@ jobs:
           fetch-depth: 0
 
       - name: Mergear master en develop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -529,12 +532,58 @@ jobs:
           # develop divergieron de verdad y eso lo resuelve una persona.
           git merge origin/master -m "Sincroniza develop con master tras el despliegue a producción"
 
-          # Este push NO dispara el pipeline de develop (GITHUB_TOKEN no
-          # encadena workflows), así que no repite el despliegue a TEST.
-          git push origin develop
+          # Dos caminos posibles, segun como este configurada la proteccion de
+          # develop:
+          #
+          #  a) Si el pipeline puede escribir (rama sin proteger, o con GitHub
+          #     Actions en la lista de bypass del ruleset), se pushea y listo.
+          #     Ese push NO dispara el pipeline de develop, porque GITHUB_TOKEN
+          #     no encadena workflows, asi que no repite el despliegue a TEST.
+          #
+          #  b) Si la regla exige Pull Request, el push se rechaza con GH013.
+          #     Eso NO es una falla: se abre un PR y alguien lo aprueba. Lo que
+          #     no puede pasar es que develop quede atras en silencio.
+          if git push origin develop 2> push.log; then
+            {
+              echo "### develop sincronizada con master"
+              echo ""
+              echo "- Commit: \`$(git rev-parse --short HEAD)\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          cat push.log
+          if ! grep -qE 'GH013|protected branch|pull request' push.log; then
+            echo "::error::El push a develop fallo por un motivo ajeno a la proteccion de la rama"
+            exit 1
+          fi
+
+          echo "::notice::develop esta protegida: se sincroniza por Pull Request"
+          RAMA="chore/sincronizar-develop"
+          git push -f origin "HEAD:refs/heads/${RAMA}"
+
+          EXISTENTE=$(gh pr list --head "$RAMA" --base develop --state open \
+                        --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTENTE" ]; then
+            URL=$(gh pr view "$EXISTENTE" --json url --jq .url)
+            echo "PR #${EXISTENTE} ya abierto; se actualizo con el push."
+          else
+            URL=$(gh pr create --base develop --head "$RAMA" \
+              --title "Sincroniza develop con master" \
+              --body "Despues del despliegue a produccion, develop necesita los commits que
+          quedaron solo en master (el commit de merge de la release y el bump de version).
+
+          Sin esto, la proxima rama nace sin ellos y los reintroduce en el siguiente merge.
+
+          El pipeline no pudo pushear directo porque develop exige Pull Request. Para que
+          esto se haga solo, agrega **GitHub Actions** a la lista de bypass del ruleset
+          (Settings -> Rules -> Proteger develop -> Bypass list).")
+          fi
 
           {
-            echo "### develop sincronizada con master"
+            echo "### develop se sincroniza por Pull Request"
             echo ""
-            echo "- Commit: \`$(git rev-parse --short HEAD)\`"
+            echo "La rama esta protegida, asi que el pipeline no puede pushear directo."
+            echo ""
+            echo "- PR a aprobar: ${URL}"
           } >> "$GITHUB_STEP_SUMMARY"
