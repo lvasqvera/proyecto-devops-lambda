@@ -57,17 +57,29 @@ Cada ambiente termina apuntando a su propio backend sin intervención manual.
 
 ## Ambientes
 
-Dos ambientes completos y aislados, en **regiones distintas a propósito** —
-así un error de región nunca alcanza al otro.
+Tres ambientes completos y aislados, en **regiones distintas a propósito** —
+así un error de región nunca alcanza a los otros, y el nivel gratuito de
+DynamoDB (25 RCU/WCU **por región**) no se reparte entre ellos.
 
-| | TEST | PRODUCCIÓN |
-|---|---|---|
-| Región | `us-east-2` | `us-east-1` |
-| Workspace de Terraform | `test` | `prod` |
-| Lambda | `ContactoAPI_test` | `ContactoAPI_prod` |
-| Tabla | `TablaContactosForm-test` | `TablaContactosForm-prod` |
-| Rol del pipeline | `gha-deploy-test` | `gha-deploy-prod` |
-| Se despliega desde | `feature/**`, `hotfix/**`, `release/**`, `develop` | `master` |
+| | ALPHA | TEST | PRODUCCIÓN |
+|---|---|---|---|
+| Región | `us-west-2` | `us-east-2` | `us-east-1` |
+| Workspace de Terraform | `alpha` | `test` | `prod` |
+| Lambda | `ContactoAPI_alpha` | `ContactoAPI_test` | `ContactoAPI_prod` |
+| Tabla | `TablaContactosForm-alpha` | `TablaContactosForm-test` | `TablaContactosForm-prod` |
+| Rol del pipeline | `gha-deploy-alpha` | `gha-deploy-test` | `gha-deploy-prod` |
+| Se despliega desde | `feature/**`, `hotfix/**` | `develop`, `release/**` | `master` |
+| Para qué sirve | trabajo en curso | lo integrado, lo valida QA | lo que usa la gente |
+
+**Por qué ALPHA y TEST están separados.** Varias ramas de trabajo comparten
+ALPHA y se pisan entre sí: eso está bien, es trabajo en curso. Lo que no puede
+pasar es que pisen el ambiente donde QA valida lo que ya está integrado. Con un
+solo ambiente para las dos cosas, la rama de un compañero sobrescribe aquello
+que otro está probando.
+
+Y no es solo convención: `gha-deploy-test` **no confía** en las ramas
+`feature/*`, así que una feature no puede tocar TEST aunque alguien lo intente
+desde el workflow. Quien lo impide es AWS al validar el token.
 
 **Frontend TEST**
 `http://form-devops-frontend--testf09ad3e4.s3-website.us-east-2.amazonaws.com`
@@ -84,10 +96,10 @@ de este POC.
 ## Flujo de trabajo (GitFlow)
 
 ```
-feature/**  ──push──►  TEST          desarrollo y pruebas
-hotfix/**   ──push──►  TEST          correcciones urgentes, validadas antes de prod
+feature/**  ──push──►  ALPHA        trabajo en curso, cada quien el suyo
+hotfix/**   ──push──►  ALPHA        correcciones urgentes, validadas antes de prod
      │
-     └─merge─►  develop  ──push──►  TEST          integración
+     └──PR + aprobación──►  develop  ──push──►  TEST   integración, lo valida QA
                    │
                    └─►  release/X.Y.Z  ──push──►  TEST  +  PR automático
                               │
@@ -101,7 +113,16 @@ Reglas:
 
 - **Nada se trabaja directo en `master` ni en `develop`.** Toda rama nace de
   `develop`, salvo los `hotfix/**`, que nacen de `master` y se mergean a
-  ambas.
+  ambas. En `develop` esto no es una convención: la rama está **protegida** y
+  GitHub rechaza cualquier push directo.
+- **A `develop` se entra por Pull Request aprobado.** El archivo
+  [`.github/CODEOWNERS`](.github/CODEOWNERS) define quién puede aprobarlo. Los
+  PR de feature se mergean con **«Squash and merge»**: cada funcionalidad entra
+  como un commit, y `develop` se lee como una lista de features.
+- **Tres ambientes, y la separación importa.** `alpha` es trabajo en curso y
+  las ramas se pisan entre sí a propósito; `test` solo recibe lo ya integrado,
+  así que es estable para que QA valide. Con un único ambiente, la rama de un
+  compañero sobrescribe aquello que otro está probando.
 - **A producción se entra solo por Pull Request.** El pipeline lo abre solo
   cuando el despliegue a TEST de la rama `release/**` termina bien: el PR es
   la señal de que la release está validada, no de que alguien la empujó.
@@ -109,9 +130,15 @@ Reglas:
   `master` sí genera un commit de merge — es inevitable, GitHub no tiene un
   botón de fast-forward — y por eso existe el back-merge del punto siguiente.
 - **`develop` nunca queda atrás.** Tras cada despliegue a producción, el job
-  `sincronizar_develop` mergea `master` de vuelta a `develop` y lo pushea. Sin
-  eso, el commit de merge del PR vive solo en `master` y la siguiente rama
-  nace sin él.
+  `sincronizar_develop` mergea `master` de vuelta a `develop`. Sin eso, el
+  commit de merge del PR vive solo en `master` y la siguiente rama nace sin él.
+
+  Como `develop` está protegida, ese push se rechaza con `GH013` y el job
+  **abre un Pull Request** en vez de fallar. Para que se haga solo, hay que
+  agregar **GitHub Actions** a la lista de *bypass* del ruleset (Settings →
+  Rules → «Proteger develop» → Bypass list). No se puede dejar configurado por
+  API: GitHub exige que la app esté en la organización y solo la interfaz web
+  ofrece esa opción.
 - **El tag lo genera el pipeline**, no una persona: al terminar un despliegue
   exitoso a producción, lee el último tag `v*`, incrementa el *patch* y
   publica el Release en GitHub. Nunca se crean tags a mano — en particular,
@@ -167,10 +194,17 @@ El PR hacia `master` **no hay que crearlo a mano**: lo abre el job
 TEST pasó. Un PR abierto se actualiza solo con cada push a su rama, así que el
 job no crea uno nuevo si ya existe.
 
-Ese PR automático **no dispara sus propios checks**: GitHub no encadena
-workflows a partir de acciones hechas con `GITHUB_TOKEN`, para evitar bucles
-infinitos. No es una falla — la validación ya corrió en el push a la rama
-`release/**`, que es lo que habilitó el PR.
+Ese PR automático **no ejecuta sus propios checks**, porque GitHub no encadena
+workflows a partir de acciones hechas con `GITHUB_TOKEN`: es su defensa contra
+bucles infinitos. Lo que se ve en la práctica no es «ninguna corrida», sino una
+corrida de `pull_request` detenida en `action_required` — esperando una
+aprobación manual que nadie da — que termina marcada en rojo **con cero jobs
+ejecutados**.
+
+Ese rojo no significa que la release esté rota: no corrió nada, así que no
+falló nada. La validación real ya ocurrió en el push a la rama `release/**`,
+que es justamente lo que habilitó que el PR se abriera. Mirá esa corrida, no
+la del PR.
 
 **Requisito de la organización.** Para que el job pueda abrir el PR hace falta
 *Settings de la organización → Actions → General → «Allow GitHub Actions to
@@ -184,9 +218,32 @@ Ese mismo interruptor habilita crear **y aprobar** PRs. Hoy no agrega riesgo
 porque ninguna rama exige aprobaciones; si alguna vez se configura *branch
 protection* con revisores obligatorios, conviene revisarlo.
 
-La GUI de GitFlow (repo `gui-gitflow`) arma el enlace de un PR cualquiera con
-las ramas de origen y destino ya elegidas, y publica la rama si todavía no
-está en el remoto.
+La GUI de GitFlow (repo `gui-gitflow`) cubre este flujo completo sin salir de
+la ventana: crea y publica ramas de `feature`, `release` y `hotfix`, arma el
+enlace del PR con origen y destino ya elegidos, publica la rama si todavía no
+está en el remoto, y muestra las últimas corridas del pipeline. Lee los nombres
+de rama de la configuración de git-flow del repositorio, así que no está atada a
+`master`/`develop`.
+
+Lo único que no hace es **mergear el PR**: ese es el punto donde decide una
+persona.
+
+---
+
+## Protección de ramas
+
+`develop` está protegida por un *ruleset* (`Proteger develop`), no por la
+protección clásica:
+
+| Regla | Qué impide |
+|---|---|
+| `pull_request` (1 aprobación, *code owners*) | Pushes directos; solo entra lo revisado |
+| `allowed_merge_methods: [squash]` | Que un PR de feature entre con merge commit |
+| `non_fast_forward` | Reescribir el historial con `push --force` |
+| `deletion` | Borrar la rama |
+
+`master` **no** está protegida a propósito: a ella se llega por el PR que abre
+el pipeline, y protegerla bloquearía ese mismo flujo.
 
 ---
 
@@ -197,7 +254,8 @@ Archivo: [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml)
 | Job | Cuándo corre | Qué hace |
 |---|---|---|
 | `sonarcloud_quality_gate` | siempre | Análisis estático. **Bloqueante solo en `master`** |
-| `deploy_test` | `feature/**`, `hotfix/**`, `release/**`, `develop` | `terraform apply` en `us-east-2` |
+| `deploy_alpha` | `feature/**`, `hotfix/**` | `terraform apply` en `us-west-2` |
+| `deploy_test` | `develop`, `release/**` | `terraform apply` en `us-east-2` |
 | `deploy_prod` | `master` | `terraform apply` en `us-east-1` |
 | `release` | tras un `deploy_prod` exitoso | Calcula la versión, crea el tag y el Release |
 | `abrir_pr_master` | tras un `deploy_test` exitoso de `release/**` | Abre el PR hacia `master` si no existe ya |
@@ -254,7 +312,8 @@ Hay **dos roles**, no uno, y cada uno confía en un conjunto distinto de ramas:
 
 | Rol | Ramas que pueden asumirlo | Alcance de los permisos |
 |---|---|---|
-| `gha-deploy-test` | `develop`, `feature/*`, `hotfix/*`, `release/*` | solo recursos `*_test` |
+| `gha-deploy-alpha` | `feature/*`, `hotfix/*` | solo recursos `*_alpha` |
+| `gha-deploy-test` | `develop`, `release/*` | solo recursos `*_test` |
 | `gha-deploy-prod` | **`master` únicamente** | solo recursos `*_prod` |
 
 Esto importa: si alguien crea una rama con un workflow modificado que intente

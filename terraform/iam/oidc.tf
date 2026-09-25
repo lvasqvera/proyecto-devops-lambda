@@ -9,6 +9,13 @@
 # solo se puede asumir desde master. Una rama feature con un workflow malicioso
 # no puede tocar producción aunque lo intente, porque quien lo impide es AWS al
 # validar el token, no el código del pipeline.
+#
+# Son tres ambientes, y la separación entre los dos primeros no es decorativa:
+#   alpha  feature/* y hotfix/*  — trabajo individual, se pisan entre sí
+#   test   develop y release/*   — lo ya integrado, es lo que valida QA
+#   prod   master
+# Con un solo ambiente para las dos cosas, la rama de un compañero sobrescribe
+# el ambiente donde otro está probando la suya.
 
 # El proveedor ya existe en la cuenta: lo creó el proyecto iachatlambda, que
 # vive aquí mismo. Se referencia, no se declara, para no disputarle el recurso
@@ -30,29 +37,37 @@ locals {
   # decodificar un token real: dejar los dos evita un ciclo de CI a ciegas.
   # release/* despliega en TEST, nunca en PROD: es el candidato a producción,
   # y quien impide que se pase de ahí es esta política, no el workflow.
-  ramas_test = ["develop", "feature/*", "hotfix/*", "release/*"]
+  # Las dos listas son excluyentes a propósito: una rama feature NO puede
+  # asumir el rol de test, así que no puede tocar el ambiente que QA está
+  # validando aunque alguien lo intente desde el workflow.
+  ramas_alpha = ["feature/*", "hotfix/*"]
+  ramas_test  = ["develop", "release/*"]
 
-  subs_test = flatten([
-    for rama in local.ramas_test : [
-      "repo:${local.repo}:ref:refs/heads/${rama}",
-      "repo:${local.repo_con_ids}:ref:refs/heads/${rama}",
+  subs_de = {
+    for nombre, ramas in { alpha = local.ramas_alpha, test = local.ramas_test } :
+    nombre => flatten([
+      for rama in ramas : [
+        "repo:${local.repo}:ref:refs/heads/${rama}",
+        "repo:${local.repo_con_ids}:ref:refs/heads/${rama}",
+      ]
+    ])
+  }
+
+  subs_por_ambiente = merge(local.subs_de, {
+    prod = [
+      "repo:${local.repo}:ref:refs/heads/master",
+      "repo:${local.repo_con_ids}:ref:refs/heads/master",
     ]
-  ])
+  })
 
-  subs_prod = [
-    "repo:${local.repo}:ref:refs/heads/master",
-    "repo:${local.repo_con_ids}:ref:refs/heads/master",
-  ]
+  ambientes = ["alpha", "test", "prod"]
 
   bucket_state = "arn:aws:s3:::s3h-terraform-backend-2026"
   tabla_lock   = "arn:aws:dynamodb:us-east-1:${local.cuenta}:table/terraform-lock"
 }
 
 data "aws_iam_policy_document" "confianza_github" {
-  for_each = {
-    test = local.subs_test
-    prod = local.subs_prod
-  }
+  for_each = local.subs_por_ambiente
 
   statement {
     effect  = "Allow"
@@ -78,7 +93,7 @@ data "aws_iam_policy_document" "confianza_github" {
 }
 
 resource "aws_iam_role" "gha" {
-  for_each = toset(["test", "prod"])
+  for_each = toset(local.ambientes)
 
   name                 = "gha-deploy-${each.key}"
   description          = "Despliegue del pipeline en ${each.key}, sin llaves estaticas"
@@ -91,7 +106,7 @@ resource "aws_iam_role" "gha" {
 # tabla, restringirle además PutItem no protege de nada, así que el comodín
 # acotado por recurso es proporcional al riesgo real.
 data "aws_iam_policy_document" "gha" {
-  for_each = toset(["test", "prod"])
+  for_each = toset(local.ambientes)
 
   statement {
     sid    = "EstadoDeTerraform"
@@ -190,7 +205,7 @@ data "aws_iam_policy_document" "gha" {
 }
 
 resource "aws_iam_policy" "gha" {
-  for_each = toset(["test", "prod"])
+  for_each = toset(local.ambientes)
 
   name        = "GitHubActionsDeploy-${each.key}"
   description = "Permisos del pipeline sobre los recursos de ${each.key}"
@@ -198,10 +213,15 @@ resource "aws_iam_policy" "gha" {
 }
 
 resource "aws_iam_role_policy_attachment" "gha" {
-  for_each = toset(["test", "prod"])
+  for_each = toset(local.ambientes)
 
   role       = aws_iam_role.gha[each.key].name
   policy_arn = aws_iam_policy.gha[each.key].arn
+}
+
+output "rol_deploy_alpha" {
+  description = "ARN a poner en la variable AWS_ROLE_ALPHA del repositorio"
+  value       = aws_iam_role.gha["alpha"].arn
 }
 
 output "rol_deploy_test" {
