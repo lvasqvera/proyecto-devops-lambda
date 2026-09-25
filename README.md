@@ -245,6 +245,35 @@ protección clásica:
 `master` **no** está protegida a propósito: a ella se llega por el PR que abre
 el pipeline, y protegerla bloquearía ese mismo flujo.
 
+### El bypass del dueño, y por qué existe
+
+GitHub **no deja aprobar el propio Pull Request**. Con un único *code owner*,
+la regla dejaría a esa persona bloqueada en cada PR que abra. Por eso el rol
+**Repository admin** figura en la lista de *bypass* con modo `pull_request`:
+
+| | Admin | Colaborador |
+|---|---|---|
+| Push directo a `develop` | ❌ rechazado | ❌ rechazado |
+| Mergear su propio PR | ✅ con el *check* «bypass rules» | ❌ necesita aprobación |
+
+O sea: el dueño sigue obligado a abrir un PR y a que corran los *checks*, pero
+puede mergearlo sin esperar a nadie. Un colaborador sin rol de admin **no ve
+ese checkbox**. Cada uso del bypass queda registrado en *Settings → Rules →
+Insights*.
+
+### GitHub Actions no puede estar en el bypass
+
+En esta organización, el bot de Actions no aparece como actor seleccionable:
+no es una GitHub App instalada, es una función nativa. La API lo rechaza con
+`Actor GitHub Actions integration must be part of the ruleset source or owner
+organization`, y la lista de la interfaz web tampoco lo ofrece.
+
+Por eso `sincronizar_develop` **abre un Pull Request** en lugar de pushear.
+Validado en la release `v1.0.10`: el job terminó en verde y dejó el PR
+`chore/sincronizar-develop → develop` esperando aprobación. Ese PR trae un
+commit de merge, y como la regla solo admite *squash*, entra como un commit —
+el contenido es el mismo y `develop` queda al día igual.
+
 ---
 
 ## El pipeline
