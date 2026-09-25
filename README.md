@@ -130,9 +130,15 @@ Reglas:
   `master` sí genera un commit de merge — es inevitable, GitHub no tiene un
   botón de fast-forward — y por eso existe el back-merge del punto siguiente.
 - **`develop` nunca queda atrás.** Tras cada despliegue a producción, el job
-  `sincronizar_develop` mergea `master` de vuelta a `develop` y lo pushea. Sin
-  eso, el commit de merge del PR vive solo en `master` y la siguiente rama
-  nace sin él.
+  `sincronizar_develop` mergea `master` de vuelta a `develop`. Sin eso, el
+  commit de merge del PR vive solo en `master` y la siguiente rama nace sin él.
+
+  Como `develop` está protegida, ese push se rechaza con `GH013` y el job
+  **abre un Pull Request** en vez de fallar. Para que se haga solo, hay que
+  agregar **GitHub Actions** a la lista de *bypass* del ruleset (Settings →
+  Rules → «Proteger develop» → Bypass list). No se puede dejar configurado por
+  API: GitHub exige que la app esté en la organización y solo la interfaz web
+  ofrece esa opción.
 - **El tag lo genera el pipeline**, no una persona: al terminar un despliegue
   exitoso a producción, lee el último tag `v*`, incrementa el *patch* y
   publica el Release en GitHub. Nunca se crean tags a mano — en particular,
@@ -221,6 +227,23 @@ de rama de la configuración de git-flow del repositorio, así que no está atad
 
 Lo único que no hace es **mergear el PR**: ese es el punto donde decide una
 persona.
+
+---
+
+## Protección de ramas
+
+`develop` está protegida por un *ruleset* (`Proteger develop`), no por la
+protección clásica:
+
+| Regla | Qué impide |
+|---|---|
+| `pull_request` (1 aprobación, *code owners*) | Pushes directos; solo entra lo revisado |
+| `allowed_merge_methods: [squash]` | Que un PR de feature entre con merge commit |
+| `non_fast_forward` | Reescribir el historial con `push --force` |
+| `deletion` | Borrar la rama |
+
+`master` **no** está protegida a propósito: a ella se llega por el PR que abre
+el pipeline, y protegerla bloquearía ese mismo flujo.
 
 ---
 
